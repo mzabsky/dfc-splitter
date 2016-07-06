@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
 
@@ -49,11 +50,17 @@ namespace DfcSplitter
 
     public class Program
     {
-        public static string GetFileNameByCardName(string cardName)
+        public static string GetFileNameByCardNameWithoutSpecialChars(string cardName)
         {
             var regex = new Regex(@"[^A-Za-z0-9-. ]");
             var replace = regex.Replace(cardName.Trim(), "");  
-            return "/" + replace + ".full.jpg";
+            return "/" + replace + ".jpg";
+        }
+
+        public static string GetFileNameByCardName(string cardName)
+        {
+
+            return "/" + cardName + ".jpg";
         }
 
         public static void Main(string[] args)
@@ -75,14 +82,29 @@ namespace DfcSplitter
 
                 Console.WriteLine($"Found {allCards.Length} cards");
 
-                var imagePairs =
+                var imagePairs = allCards
+                .Where(card => !allCards.Any(dayCard => dayCard.Related == card.Name))
+                .Select(card => new
+                {
+                    DayCard = card,
+                    NightCard = allCards.SingleOrDefault(nightCard => nightCard.Name == card.Related)
+                })
+                .Select(pair => new
+                {
+                    Day = pair.DayCard.Name,
+                    DayArt = GetFileNameByCardNameWithoutSpecialChars(pair.DayCard.Name),
+                    Night = pair.NightCard?.Name,
+                    NightArt = pair.NightCard != null ? GetFileNameByCardName(pair.NightCard.Name) : null
+                }).ToList();
+                
+                /*var imagePairs =
                     (from card in allCards
                     join relatedCard in allCards on card.Related equals relatedCard.Name
                     select new { Day = card.Name, DayArt = card.Set.PicUrl, Night = relatedCard.Name, NightArt = GetFileNameByCardName(relatedCard.Name) }).ToArray();
-
+*/
                 sr.Close();
 
-                Console.WriteLine($"Matched {imagePairs.Length} double faced cards");
+                Console.WriteLine($"Found {imagePairs.Count} cards");
 
                 var dayRect = new Rectangle(0, 0, 375, 523);
                 var nightRect = new Rectangle(752 - 375, 0, 375, 523);
@@ -90,14 +112,17 @@ namespace DfcSplitter
                 foreach (var imagePair in imagePairs)
                 {
                     Console.WriteLine($"Processing {imagePair.Day} // {imagePair.Night}");
+                    
+                    var newDayArt = GetFileNameByCardName(imagePair.Day);
 
                     var dayFileName = basePath + imagePair.DayArt;
+                    var newDayFileName = basePath + newDayArt;
                     var nightFileName = basePath + imagePair.NightArt;
                     
                     Bitmap sourceImage = Image.FromFile(dayFileName) as Bitmap;
 
                     // Do not rewrite the images if they have already been rewritten
-                    if (sourceImage.Width == 752)
+                    if (imagePair.Night != null && sourceImage.Width == 752)
                     {
                         Bitmap dayImage = new Bitmap(dayRect.Width, dayRect.Height);
                         Bitmap nightImage = new Bitmap(dayRect.Width, dayRect.Height);
@@ -114,10 +139,20 @@ namespace DfcSplitter
 
                         sourceImage.Dispose();
 
-                        dayImage.Save(dayFileName);
+                        File.Delete(dayFileName);
+                        dayImage.Save(newDayFileName);
                         nightImage.Save(nightFileName);
                     }
-                    
+                    else if(dayFileName != newDayFileName)
+                    {
+                        sourceImage.Dispose();
+                        File.Move(dayFileName, newDayFileName);
+                    }
+
+                    fullXml = fullXml.Replace(
+                        $"<name>{imagePair.Day}</name>\r\n <set picURL=\"{imagePair.DayArt}\"",
+                        $"<name>{imagePair.Day}</name>\r\n <set picURL=\"{newDayArt}\"");
+
                     fullXml = fullXml.Replace(
                         $"<name>{imagePair.Night}</name>\r\n <set picURL=\"{imagePair.DayArt}\"",
                         $"<name>{imagePair.Night}</name>\r\n <set picURL=\"{imagePair.NightArt}\"");
