@@ -60,7 +60,7 @@ namespace DfcSplitter
         public static string GetFileNameByCardName(string cardName)
         {
 
-            return "/" + cardName + ".jpg";
+            return "/" + cardName.Replace('’', '\'') + ".jpg";
         }
 
         public static void Main(string[] args)
@@ -149,14 +149,18 @@ namespace DfcSplitter
                         File.Move(dayFileName, newDayFileName);
                     }
 
-                    fullXml = fullXml.Replace(
+                    /*fullXml = fullXml.Replace(
                         $"<name>{imagePair.Day}</name>\r\n <set picURL=\"{imagePair.DayArt}\"",
-                        $"<name>{imagePair.Day}</name>\r\n <set picURL=\"{newDayArt}\"");
+                        $"<name>{imagePair.Day}</name>\r\n <set");
 
                     fullXml = fullXml.Replace(
                         $"<name>{imagePair.Night}</name>\r\n <set picURL=\"{imagePair.DayArt}\"",
-                        $"<name>{imagePair.Night}</name>\r\n <set picURL=\"{imagePair.NightArt}\"");
+                        $"<name>{imagePair.Night}</name>\r\n <set");*/
                 }
+
+                fullXml = Regex.Replace(fullXml, $" <set[^>]*>", "<set>");
+
+                fullXml = fullXml.Replace('’', '\'');
 
                 Console.WriteLine("Writing modified XML");
 
